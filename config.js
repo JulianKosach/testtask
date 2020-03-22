@@ -14,7 +14,6 @@ export default class ProjectConfig {
   reComment = /(^\s*;|\s+;|^\s*#).+/;
   reSection = /^\[([^\]]+)\]/;
   reOptionValue = /^([^=]+)=(.*)/;
-  reMultiValue = /\s?[, ]\s?/;
   reMultiLineValue = /^\s+(.*)/;
   reInterpolation = /\$\{([^\.\}]+)\.([^\}]+)\}/g;
 
@@ -51,7 +50,6 @@ export default class ProjectConfig {
     this._parsed.push(path);
     let section = null;
     let option = null;
-    let sectionsToExtend = [];
     for (let line of fs.readFileSync(path, 'utf-8').split(this.reLines)) {
       // Remove comments
       line = line.replace(this.reComment, '');
@@ -74,12 +72,7 @@ export default class ProjectConfig {
       const mOptionValue = line.match(this.reOptionValue);
       if (section && mOptionValue) {
         option = mOptionValue[1].trim();
-        const value = mOptionValue[2].trim();
-        if (option === 'extends') {
-          sectionsToExtend.push({section, value});
-        } else {
-          this._data[section][option] = value;
-        }
+        this._data[section][option] = mOptionValue[2].trim();
         continue;
       }
 
@@ -93,10 +86,6 @@ export default class ProjectConfig {
     this.getlist('platformio', 'extra_configs').forEach(pattern =>
       glob.sync(pattern).forEach(item => this.read(item))
     );
-
-    sectionsToExtend.forEach(({section, value}) => {
-      this.extend(section, value);
-    })
   }
 
   getraw(section, option) {
@@ -108,7 +97,11 @@ export default class ProjectConfig {
       value = this._data[section][option];
     } else if (section.startsWith('env:')) {
       value = this.get('env', option);
-    } else {
+    }
+    if (!value && 'extends' in this._data[section]) {
+      value = this.getFromExtends(section, option);
+    }
+    if (!value) {
       throw `NoOptionError: ${section} -> ${option}`;
     }
     if (!value.includes('${') || !value.includes('}')) {
@@ -148,18 +141,16 @@ export default class ProjectConfig {
     return ProjectConfig.parse_multi_values(this.get(section, option, default_));
   }
 
-  extend(section, extendsOption) {
-    const currentSection = this._data[section];
-    const extendsArr = extendsOption.split(this.reMultiValue);
-    extendsArr.forEach(extendsSectionName => {
-      const extendsSection = this._data[extendsSectionName];
-      if (extendsSection) {
-        for (let [key, value] of Object.entries(extendsSection)) {
-          if (key !== 'extends' && !currentSection.hasOwnProperty(key)) {
-            currentSection[key] = value;
-          }
-        }
+  getFromExtends(section, option) {
+    if (this._data[section][option]) {
+      return this._data[section][option];
+    }
+    const extendsArr = ProjectConfig.parse_multi_values(this._data[section].extends);
+    for (const extendsSection of extendsArr) {
+      let value = this.getFromExtends(extendsSection, option);
+      if (value) {
+        return value;
       }
-    });
+    }
   }
 }
