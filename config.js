@@ -6,6 +6,7 @@
  * the root directory of this source tree.
  */
 
+import 'regenerator-runtime/runtime.js';
 import fs from 'fs';
 import glob from 'glob';
 
@@ -142,15 +143,20 @@ export default class ProjectConfig {
   }
 
   getFromExtends(section, option) {
-    if (this._data[section][option]) {
-      return this._data[section][option];
-    }
-    const extendsArr = ProjectConfig.parse_multi_values(this._data[section].extends);
-    for (const extendsSection of extendsArr) {
-      let value = this.getFromExtends(extendsSection, option);
-      if (value) {
-        return value;
+    const data = this._data;
+    function* generator(s) {
+      if (data[s][option]) {
+        yield data[s][option];
+      } else if (data[s].extends) {
+        const extendsArr = ProjectConfig.parse_multi_values(data[s].extends);
+        for (const extendsSection of extendsArr) {
+          const v = generator(extendsSection).next().value;
+          if (v) { yield v; }
+        }
+      } else {
+        yield undefined;
       }
     }
+    return generator(section).next().value;
   }
 }

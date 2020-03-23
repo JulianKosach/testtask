@@ -23,5 +23,8 @@
     "@babel/plugin-proposal-class-properties": "^7.0.0",
     "@babel/preset-env": "^7.9.0",
     "rimraf": "^3.0.2"
+  },
+  "dependencies": {
+    "regenerator-runtime": "^0.13.5"
   }
 }
